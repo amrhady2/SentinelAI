@@ -13,7 +13,7 @@ from app.analytics_config import (
     INCIDENT_TITLE_TEMPLATE,
     SEVERITY_WEIGHTS,
 )
-from app.models import Anomaly, Incident
+from app.models import Anomaly, Incident, LogEvent
 from app.services.ingestion import to_utc_iso
 
 
@@ -75,16 +75,25 @@ def _refresh_incident_summary(session: Session, incident: Incident, anomaly_ids:
 def close_quiet_incidents(
     session: Session,
     *,
-    now: datetime | None = None,
+    latest_event_time: datetime | None = None,
     window_minutes: int = CORRELATION_WINDOW_MINUTES,
 ) -> int:
-    """Close open incidents after a full configured quiet period."""
-    now_utc = _utc(now or datetime.now(timezone.utc))
+    """Close incidents using global event time, never elapsed wall-clock time."""
+    if latest_event_time is None:
+        latest_event_time = session.exec(
+            select(LogEvent.timestamp)
+            .order_by(LogEvent.timestamp.desc(), LogEvent.id.desc())
+            .limit(1)
+        ).first()
+    if latest_event_time is None:
+        return 0
+
+    reference_time = _utc(latest_event_time)
     quiet_period = timedelta(minutes=window_minutes)
     open_incidents = session.exec(select(Incident).where(Incident.status == "open")).all()
     closed = 0
     for incident in open_incidents:
-        if now_utc - _utc(incident.last_seen) >= quiet_period:
+        if reference_time - _utc(incident.last_seen) >= quiet_period:
             incident.status = "closed"
             session.add(incident)
             closed += 1
@@ -94,7 +103,7 @@ def close_quiet_incidents(
 def correlate_anomalies(
     session: Session,
     *,
-    now: datetime | None = None,
+    latest_event_time: datetime | None = None,
     window_minutes: int = CORRELATION_WINDOW_MINUTES,
 ) -> CorrelationSummary:
     """Attach uncorrelated anomalies to per-service incidents in timestamp order."""
@@ -165,5 +174,5 @@ def correlate_anomalies(
             session.add(anomaly)
             attached += 1
 
-    closed = close_quiet_incidents(session, now=now, window_minutes=window_minutes)
+    closed = close_quiet_incidents(session, latest_event_time=latest_event_time, window_minutes=window_minutes)
     return CorrelationSummary(opened, attached, closed)

@@ -142,6 +142,8 @@ class AlertRead(BaseModel):
     channel: str
     timestamp: str
     delivery_status: str
+    status_at_alert_time: str | None = None
+    current_incident_status: str | None = None
     payload: dict[str, Any]
 
 

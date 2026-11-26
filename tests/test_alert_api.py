@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import socket
 
 from fastapi.testclient import TestClient
@@ -72,7 +73,11 @@ def test_local_webhook_endpoint_records_simulated_attempt(api_client, monkeypatc
     assert body["incident_id"] == incident_id
     assert body["channel"] == "local_webhook"
     assert body["delivery_status"] == "simulated"
+    assert body["status_at_alert_time"] == "open"
+    assert body["current_incident_status"] == "open"
+    assert "status" not in body
     assert body["payload"] == {"source": "test", "value": 7}
+    assert "status" not in body["payload"]
     assert outbound_attempts == []
 
     listed = client.get("/api/v1/alerts", params={"incident_id": incident_id})
@@ -84,6 +89,19 @@ def test_local_webhook_endpoint_records_simulated_attempt(api_client, monkeypatc
         assert stored.channel == "local_webhook"
         assert stored.delivery_status == "simulated"
         assert stored.timestamp is not None
+        assert json.loads(stored.payload_json)["status_at_alert_time"] == "open"
+        saved_incident = session.get(Incident, incident_id)
+        assert saved_incident is not None
+        saved_incident.status = "closed"
+        session.add(saved_incident)
+        session.commit()
+
+    refreshed_alerts = client.get("/api/v1/alerts", params={"incident_id": incident_id})
+    refreshed = refreshed_alerts.json()[0]
+    assert refreshed["status_at_alert_time"] == "open"
+    assert refreshed["current_incident_status"] == "closed"
+    assert "status" not in refreshed
+    assert "status" not in refreshed["payload"]
 
 
 def test_alert_evaluation_endpoint_deduplicates_same_open_incident(api_client) -> None:

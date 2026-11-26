@@ -25,7 +25,7 @@ def incident_alert_payload(incident: Incident) -> dict[str, Any]:
         "service": incident.service_group,
         "severity": incident.severity,
         "title": incident.title,
-        "status": incident.status,
+        "status_at_alert_time": incident.status,
         "first_seen": _utc(incident.first_seen).isoformat().replace("+00:00", "Z"),
         "last_seen": _utc(incident.last_seen).isoformat().replace("+00:00", "Z"),
         "anomaly_ids": json.loads(incident.anomaly_ids_json or "[]"),
@@ -49,12 +49,17 @@ def record_local_webhook_attempt(
     existing = session.exec(select(SimulatedAlert).where(SimulatedAlert.dedupe_key == dedupe_key)).first()
     if existing is not None:
         return existing
+    persisted_payload = dict(payload)
+    # Explicitly mark the incident state observed when this simulated delivery
+    # was created. Do not expose a bare historical `status` field.
+    persisted_payload.pop("status", None)
+    persisted_payload["status_at_alert_time"] = incident.status
     alert = SimulatedAlert(
         incident_id=int(incident.id),
         dedupe_key=dedupe_key,
         channel=ALERT_CHANNEL,
         destination="simulated://local-webhook",
-        payload_json=json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+        payload_json=json.dumps(persisted_payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
         delivery_status=ALERT_DELIVERY_STATUS,
         timestamp=timestamp,
         created_at=timestamp,

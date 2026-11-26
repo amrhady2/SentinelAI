@@ -9,6 +9,7 @@ import pytest
 
 from app import main as main_module
 from app.database import get_session
+from app.models import Incident, LogEvent
 
 
 @pytest.fixture
@@ -28,14 +29,14 @@ def api_client(monkeypatch):
     main_module.app.dependency_overrides[get_session] = override_session
     try:
         with TestClient(main_module.app) as client:
-            yield client
+            yield client, engine
     finally:
         main_module.app.dependency_overrides.clear()
         engine.dispose()
 
 
 def test_all_api_routes_cover_empty_reads_and_validation(api_client) -> None:
-    client = api_client
+    client, _engine = api_client
     assert client.get("/health").status_code == 200
     assert client.get("/api/v1/logs").json() == []
     assert client.get("/api/v1/services").json() == []
@@ -55,7 +56,7 @@ def test_all_api_routes_cover_empty_reads_and_validation(api_client) -> None:
 
 
 def test_ingest_detect_and_read_back_anomalies_incidents_health_and_alerts(api_client) -> None:
-    client = api_client
+    client, _engine = api_client
     latest_minute = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     events = []
     for minute in range(31):
@@ -117,3 +118,39 @@ def test_ingest_detect_and_read_back_anomalies_incidents_health_and_alerts(api_c
     assert alerts.status_code == 200
     assert len(alerts.json()) == 1
     assert alerts.json()[0]["delivery_status"] == "simulated"
+
+
+def test_incident_closure_uses_latest_event_time_not_wall_clock(api_client) -> None:
+    client, engine = api_client
+    incident_last_seen = datetime(2026, 1, 1, 16, 1, tzinfo=timezone.utc)
+    latest_event_time = datetime(2026, 1, 1, 16, 1, 59, tzinfo=timezone.utc)
+    with Session(engine) as session:
+        session.add(
+            Incident(
+                dedupe_key="event-time-closure-regression",
+                service_group="payments",
+                severity="medium",
+                title="medium anomaly in payments",
+                status="open",
+                first_seen=incident_last_seen,
+                last_seen=incident_last_seen,
+                anomaly_count=1,
+                anomaly_ids_json="[1]",
+                explanation="evidence-based incident",
+            )
+        )
+        session.add(
+            LogEvent(
+                timestamp=latest_event_time,
+                service="payments",
+                level="info",
+                message="latest event",
+                latency_ms=100,
+                attributes_json="{}",
+            )
+        )
+        session.commit()
+
+    response = client.get("/api/v1/incidents", params={"service": "payments"})
+    assert response.status_code == 200, response.text
+    assert response.json()[0]["status"] == "open"

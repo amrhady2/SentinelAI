@@ -72,14 +72,24 @@ def _anomaly_read(row: Anomaly) -> AnomalyRead:
     )
 
 
-def _alert_read(row: SimulatedAlert) -> AlertRead:
+def _alert_read(session: Session, row: SimulatedAlert) -> AlertRead:
+    payload = json.loads(row.payload_json)
+    # Older rows stored the snapshot as an ambiguous `status` key. Normalize
+    # it on read so clients never mistake a historical status for current state.
+    status_at_alert_time = payload.pop("status_at_alert_time", None)
+    legacy_status = payload.pop("status", None)
+    if status_at_alert_time is None:
+        status_at_alert_time = legacy_status
+    incident = session.get(Incident, row.incident_id)
     return AlertRead(
         id=int(row.id),
         incident_id=row.incident_id,
         channel=row.channel,
         timestamp=to_utc_iso(row.timestamp),
         delivery_status=row.delivery_status,
-        payload=json.loads(row.payload_json),
+        status_at_alert_time=status_at_alert_time,
+        current_incident_status=incident.status if incident is not None else None,
+        payload=payload,
     )
 
 
@@ -184,6 +194,7 @@ def run_detection(session: Session = Depends(get_session)) -> DetectionRunRespon
     ]
     metrics = build_bucket_metrics(pd.DataFrame(raw_events))
     evidence = rolling_zscore_detect(metrics) + isolation_forest_detect(metrics)
+    latest_event_timestamp = max(row.timestamp for row in rows)
     created = updated = 0
     by_method: dict[str, int] = {}
     for anomaly in evidence:
@@ -195,10 +206,9 @@ def run_detection(session: Session = Depends(get_session)) -> DetectionRunRespon
 
     session.flush()
     now = datetime.now(timezone.utc)
-    correlation = correlate_anomalies(session, now=now)
+    correlation = correlate_anomalies(session, latest_event_time=latest_event_timestamp)
     stored_anomalies = session.exec(select(Anomaly)).all()
     services = sorted({row.service for row in rows})
-    latest_event_timestamp = max(row.timestamp for row in rows)
     health_scores = calculate_service_health_scores(
         services,
         stored_anomalies,
@@ -319,7 +329,7 @@ def evaluate_alerts(session: Session = Depends(get_session)) -> AlertEvaluationR
     return AlertEvaluationResponse(
         created=len(alerts),
         suppressed=suppressed,
-        alerts=[_alert_read(row) for row in alerts],
+        alerts=[_alert_read(session, row) for row in alerts],
     )
 
 
@@ -328,6 +338,9 @@ def record_local_webhook(
     request: LocalWebhookRequest,
     session: Session = Depends(get_session),
 ) -> AlertRead:
+    closed = close_quiet_incidents(session)
+    if closed:
+        session.commit()
     incident = session.get(Incident, request.incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="incident not found")
@@ -339,7 +352,7 @@ def record_local_webhook(
     )
     session.commit()
     session.refresh(alert)
-    return _alert_read(alert)
+    return _alert_read(session, alert)
 
 
 @app.get("/api/v1/alerts", response_model=list[AlertRead])
@@ -350,6 +363,9 @@ def list_alerts(
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
 ) -> list[AlertRead]:
+    closed = close_quiet_incidents(session)
+    if closed:
+        session.commit()
     statement = select(SimulatedAlert).order_by(
         SimulatedAlert.timestamp.desc(), SimulatedAlert.id.desc()
     )
@@ -358,4 +374,4 @@ def list_alerts(
     if channel:
         statement = statement.where(SimulatedAlert.channel == channel.strip())
     rows = session.exec(statement.offset(offset).limit(limit)).all()
-    return [_alert_read(row) for row in rows]
+    return [_alert_read(session, row) for row in rows]

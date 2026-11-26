@@ -30,6 +30,11 @@ This document records approved scope and parameters from the user prompts in `pr
 - Each anomaly retains method, metric, observed value, expected baseline/threshold, score and score label, severity, affected service, timestamp, and supporting structured evidence. Step 2 assigns uniform `medium` severity; severity classification policy was not set in the step 1/2 prompts.
 - The detection API persists evidence idempotently, with `POST /api/v1/detection/run` and `GET /api/v1/anomalies`.
 
+## Step 3–4 event-time and alert-status decisions
+
+- Incident closure uses the global latest stored event timestamp as its explicit reference time. It is the same event-time reference used to anchor the service health window. Read and alert-evaluation endpoints do not close incidents based on wall-clock time. The quiet period closes an incident when `global_latest_event_time - incident.last_seen >= correlation_window_minutes`.
+- Alert responses expose `status_at_alert_time` as the persisted incident-status snapshot and `current_incident_status` from the currently stored incident. They do not expose an ambiguous bare `status` field. Legacy stored payloads with `status` are normalized at read time.
+
 ## Existing implementation alignment
 
 Implementation references: `app/detection_config.py`, `app/services/metrics.py`, `app/services/detection.py`, `app/models.py`, `app/main.py`, `tests/test_detection.py`, and `README.md`. This specification records only approved decisions and step 1/2 implementation, not later-stage requirements.
