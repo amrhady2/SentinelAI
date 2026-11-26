@@ -138,6 +138,10 @@ The dashboard’s default API URL (`127.0.0.1:8000`) points to the API process i
 
 Generated events are synthetic. Timestamps are normalized to UTC; SQLite may not retain timezone metadata, so API reads are normalized to UTC. Detection and explanations are deterministic and do not call an LLM. The webhook is local and simulated; no cloud service or external network delivery is used. Do not upload production logs unless their use is approved for the environment. Streamlit’s optional file-watching dependency `watchdog==7.1.1` may be installed locally for faster reloads; it is not required and is not included in `requirements.txt` or the Docker image.
 
+## Cleanup
+
+No cloud resources, cloud accounts, hosted databases, or hosted application services were created for this project. The application data and Docker runtime are local. The Docker build uses the `python:3.12-slim` base image and may contact Docker Hub to obtain it if it is not already cached; no cloud resource is provisioned by that step.
+
 ## Scaffold review
 
 The initial scaffold was inspected before refactoring. Its log validation and persistence concepts were retained and separated into schemas, models, database, and ingestion modules. The earlier single-file threshold detector was removed because it did not match the approved detection design. The preserved `drafts/dashboard_draft.py` informed the active `dashboard.py`; its ingestion controls, demo-seeding action, and incident mutation controls were omitted to keep the dashboard read-only. Dashboard data comes exclusively from FastAPI endpoints.

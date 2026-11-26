@@ -179,3 +179,17 @@ Run pytest -v and show the output. Commit with a clear message but do not push; 
 ```text
 resume step 7
 ```
+
+## Prompt 16 — submission package
+
+```text
+Submission package. Three items.
+
+1. AI-generated presentation deck. Create a Markdown deck at docs/SentinelAI_Deck.md (the instructions allow PPT or Markdown; use Markdown). It must cover: what SentinelAI is and the problem it solves; the architecture (FastAPI + SQLModel + SQLite, Pandas, Streamlit + Plotly, Pytest, Docker, local-first, no cloud); the detection approach (rolling z-scores on error rate, p95 latency, and event frequency; 1-minute buckets, 30-bucket rolling window, |z| > 3, 30-bucket minimum history; Isolation Forest deterministic with random_state 42); the event-time rules (health window anchored to the latest ingested event; incident closure uses the global latest event time, with the cross-service limitation); incidents, correlation, and health scoring (weights 2/5/10/20, score 0-100); alerting (dedup, 15-minute cooldown, simulated local webhooks, status_at_alert_time and current_incident_status); the dashboard (read-only, GET endpoints only); the verification evidence (40 tests passing; seeded run of 350 events with 18 anomalies, incident 2 open and incident 1 closed, dashboard showing 1 open incident and health 10; Docker smoke test with the API and dashboard healthy); and the known limitations (Isolation Forest false positives on normal traffic: 11 in the seeded normal window and 0 z-score; the global latest-event closure tradeoff). Keep every number accurate to the code and the verified results; do not invent anything.
+
+2. prompts.md final check. Read prompts.md and verify it contains every prompt sent in this session, in order, with the exact text. Report any prompt that is missing, out of order, or paraphrased. Fix it if needed.
+
+3. Cleanup confirmation. Confirm that no cloud resources were created during this build (everything is local: SQLite, local Docker, no cloud accounts or services). Add one short Cleanup paragraph to the README stating that, so the submission can cite it.
+
+Commit with a clear message but do not push; I will push from my terminal. Report the elapsed time. Wait for my next instruction before the submission message.
+```
