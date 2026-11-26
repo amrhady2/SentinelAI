@@ -159,3 +159,23 @@ Follow-up on the closure fix (commit 4435374). The live API on port 8000 returns
 
 Run pytest -v and show the output. Commit any changes with a clear message but do not push; I will push from my terminal. Report the elapsed time. Wait for my next instruction before moving to step 7.
 ```
+
+## Prompt 14 — step 7: Dockerfile and final README
+
+```text
+Step 7: single Dockerfile + final README.
+
+1. Add a single Dockerfile at the repo root. It must build the image and run the API by default; the dashboard must be runnable from the same image via a documented command. Do not add docker-compose (that was cut as out of scope and is recorded in the README). The image must build and run fully locally with no cloud services. Verify with a docker build and a smoke test that the API responds and the dashboard starts. Report the build and smoke-test output.
+
+2. Finalize README.md as the submission README. It must include: what SentinelAI is and the stack; how to run it locally (virtual environment and Docker); the detection parameters (1-minute buckets, 30-bucket rolling window, z-threshold |z| > 3, minimum history 30 buckets, Isolation Forest deterministic with random_state 42, and the contamination setting); the event-time rules (health window anchored to the latest ingested event; incident closure uses the global latest event time, with the cross-service limitation stated plainly); the alert model (dedup, 15-minute cooldown, simulated local webhooks, status_at_alert_time and current_incident_status); the known limitations (Isolation Forest false positives on normal traffic: 11 Isolation Forest findings and 0 z-score findings in the seeded normal window; the global latest-event closure tradeoff); the seeded verification evidence (350 events, 18 anomalies, incident 2 open and incident 1 closed, dashboard showing 1 open incident, health 10); and how to run the tests. Keep it accurate to the code; do not claim anything the tests do not cover.
+
+3. requirements.txt: watchdog 7.1.1 was hand-installed and is not in requirements.txt. Either add it there pinned, or note it in the README as an optional local dependency. Do not add pytest-cov (it is not in requirements.txt; coverage was not run).
+
+Run pytest -v and show the output. Commit with a clear message but do not push; I will push from my terminal. Report the elapsed time. Wait for my next instruction before the submission package (deck, prompts.md final check, and cleanup confirmation).
+```
+
+## Prompt 15 — resume step 7
+
+```text
+resume step 7
+```

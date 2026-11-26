@@ -1,6 +1,8 @@
 # SentinelAI — Intelligent Observability & Event Watchdog
 
-Local-first, API-first Python service. Steps 1–5 are implemented: project skeleton and ingestion, deterministic anomaly detection, incident correlation, service health scores, simulated local alerting, and a read-only dashboard. Container packaging remains for a later approved step.
+SentinelAI is a local-first, API-first observability service that ingests application logs, detects statistical anomalies, correlates incidents, scores service health, and records simulated alerts. The dashboard visualizes API-backed health history, anomalies, incidents, and alerts. Detection and alert explanations do not depend on an LLM.
+
+**Stack:** Python 3.12, FastAPI, SQLModel, SQLite, Pandas, scikit-learn Isolation Forest, Streamlit, Plotly, pytest, and Docker. No cloud services are required at runtime.
 
 ## Implemented in step 1
 
@@ -48,7 +50,7 @@ Local-first, API-first Python service. Steps 1–5 are implemented: project skel
 
 ## Run locally
 
-Python 3.11 or newer is recommended. Install dependencies, then start the API:
+Python 3.12 is used for the tested image. Python 3.11 or newer is recommended locally. Install dependencies in a virtual environment, then start the API:
 
 ```bash
 python -m venv .venv
@@ -83,7 +85,7 @@ Then run detection using `POST /api/v1/detection/run` and review results from `G
 pytest -q
 ```
 
-The suite is in `tests/` and covers minute bucket aggregation and gap filling, rolling baseline exclusion, z-score warm-up and zero-variance behavior, missing values, Isolation Forest warm-up, detection and reproducibility, incident correlation boundaries and quiet-period close, health scoring/clamping/window boundaries and event-time anchoring, alert deduplication/cooldown, and local webhook recording.
+The suite is in `tests/` and covers minute bucket aggregation and gap filling, rolling baseline exclusion, z-score warm-up and zero-variance behavior, missing values and Isolation Forest warm-up/reproducibility, incident correlation boundaries and event-time quiet-period close, health scoring/clamping/window boundaries and event-time anchoring, alert deduplication/cooldown, simulated webhook recording, API endpoints, and end-to-end ingestion/detection/readback. Test fixtures use in-memory SQLite (`sqlite://`) rather than the default `data/sentinelai.db`.
 
 
 ### Verified seeded evidence (2026-11-26)
@@ -93,6 +95,30 @@ Read-only verification against the local API on port 8001, backed by the disposa
 The two incidents also match event-time closure: incident 1, last seen at 14:51 UTC, is closed because the latest event at 15:09:40 UTC is 18 minutes 40 seconds later (beyond the five-minute window). Incident 2, last seen at 15:09 UTC, remains open because its last event is also the latest event. The API reports one open incident. The alerts expose `current_incident_status` and `status_at_alert_time`, with no bare `status` key.
 
 The health endpoint reports checkout score **10**, **18** in-window anomalies, a 60-minute window, and `window_end` **2026-11-26T15:09:40Z**. The dashboard was pointed at `http://127.0.0.1:8001` via `SENTINEL_API_URL`; its open-incident count was **1** and its health history score was **10**, matching the API response.
+
+## Run with Docker
+
+Build the image locally; its default command starts only the FastAPI service. The runtime has no cloud-service dependency. Docker Compose is intentionally out of scope.
+
+```bash
+docker build -t sentinelai:local .
+docker volume create sentinelai-data
+docker run -d --name sentinelai \
+  -p 127.0.0.1:8000:8000 \
+  -p 127.0.0.1:8501:8501 \
+  -v sentinelai-data:/app/data \
+  sentinelai:local
+```
+
+The API is available at `http://127.0.0.1:8000/docs`. Start the dashboard from the same image/container in another terminal:
+
+```bash
+docker exec -it sentinelai streamlit run dashboard.py \
+  --server.address 0.0.0.0 --server.port 8501 \
+  --browser.gatherUsageStats false
+```
+
+The dashboard’s default API URL (`127.0.0.1:8000`) points to the API process in that same container. The host ports are published only on loopback. Open `http://127.0.0.1:8501`. Stop/remove the container with `docker rm -f sentinelai`; the named volume retains its local database.
 
 ## API available so far
 
@@ -110,7 +136,7 @@ The health endpoint reports checkout score **10**, **18** in-window anomalies, a
 
 ## Data and safety
 
-Generated events are synthetic. Timestamps are normalized to UTC; SQLite may not retain timezone metadata, so API reads are normalized to UTC. Detection and explanations are deterministic and do not call an LLM. The webhook is local and simulated; no cloud service or external network delivery is used. Do not upload production logs unless their use is approved for the environment.
+Generated events are synthetic. Timestamps are normalized to UTC; SQLite may not retain timezone metadata, so API reads are normalized to UTC. Detection and explanations are deterministic and do not call an LLM. The webhook is local and simulated; no cloud service or external network delivery is used. Do not upload production logs unless their use is approved for the environment. Streamlit’s optional file-watching dependency `watchdog==7.1.1` may be installed locally for faster reloads; it is not required and is not included in `requirements.txt` or the Docker image.
 
 ## Scaffold review
 
@@ -118,7 +144,7 @@ The initial scaffold was inspected before refactoring. Its log validation and pe
 
 The exact prompt history is maintained in [`prompts.md`](prompts.md).
 
-## Remaining build scope
+## Packaging scope
 
-- Not implemented yet: container packaging.
-- Docker Compose is out of scope for this build; packaging will use a single Dockerfile only. The Dockerfile itself has not yet been added.
+- A single root `Dockerfile` builds the application image and runs the API by default; the dashboard runs from that same image using `docker exec` as documented above.
+- Docker Compose is intentionally out of scope.
