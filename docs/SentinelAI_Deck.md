@@ -66,6 +66,7 @@ The design is local-first: SQLite stores data locally, Docker runs locally, and 
 - Streamlit + Plotly displays health history, anomaly evidence, incident explanations, and alert delivery status.
 - It reads from FastAPI endpoints only and uses **GET requests only**.
 - The dashboard is read-only; it does not directly access SQLite or perform write actions.
+- For local runs, Streamlit binds to `127.0.0.1`. In Docker, it binds to `0.0.0.0` inside the container; the published host port is restricted to `127.0.0.1`.
 
 ### Slide 8 — Verified results
 

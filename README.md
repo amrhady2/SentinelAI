@@ -46,7 +46,7 @@ SentinelAI is a local-first, API-first observability service that ingests applic
 
 - `dashboard.py` uses Streamlit and Plotly and reads the local FastAPI API only. It does not import database modules, read SQLite, or expose write actions.
 - It shows stored per-service health history, structured anomaly evidence, incident explanations, and simulated alert delivery statuses.
-- `SENTINEL_API_URL` can select the API origin, but it is restricted to `localhost`, `127.0.0.1`, or `::1`. Streamlit binds to loopback.
+- `SENTINEL_API_URL` can select the API origin, but it is restricted to `localhost`, `127.0.0.1`, or `::1`. For local runs, Streamlit binds to `127.0.0.1`. In Docker, it binds to `0.0.0.0` inside the container; the published host port is restricted to `127.0.0.1`.
 
 ## Run locally
 

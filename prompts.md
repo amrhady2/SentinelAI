@@ -193,3 +193,9 @@ Submission package. Three items.
 
 Commit with a clear message but do not push; I will push from my terminal. Report the elapsed time. Wait for my next instruction before the submission message.
 ```
+
+## Prompt 17 — clarify Streamlit Docker binding
+
+```text
+README.md says Streamlit binds to loopback, but the Docker command binds Streamlit to 0.0.0.0 inside the container while the host port stays restricted to loopback. Reword the loopback claim to distinguish the local run (Streamlit binds to 127.0.0.1) from the container run (Streamlit binds to 0.0.0.0 inside the container; the published host port is 127.0.0.1 only). Apply the same clarification to the matching line in docs/SentinelAI_Deck.md. Change nothing else. Then append this prompt as prompt 17 to prompts.md.
+```
