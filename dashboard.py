@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 import plotly.express as px
-import requests
+import httpx
 import streamlit as st
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
@@ -27,12 +27,12 @@ def local_api_url() -> str:
 
 
 def api_get(base_url: str, path: str, **params):
-    """Read data from the local FastAPI API; this dashboard makes GET requests only."""
-    response = requests.get(
+    """Read data from the local FastAPI API; this dashboard makes GET calls only."""
+    response = httpx.get(
         f"{base_url}{path}",
         params=params,
         timeout=(1, 5),
-        allow_redirects=False,
+        follow_redirects=False,
     )
     response.raise_for_status()
     return response.json()
@@ -47,8 +47,8 @@ except ValueError as exc:
 with st.sidebar:
     st.header("Local data source")
     st.caption(API_URL)
-    st.caption("Read-only: this page uses GET requests to the FastAPI API.")
-    if st.button("Refresh dashboard", use_container_width=True):
+    st.caption("Read-only: this page uses GET calls to the FastAPI API.")
+    if st.button("Refresh dashboard", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 
@@ -68,7 +68,7 @@ def load_dashboard_data(base_url: str) -> tuple[dict, dict]:
     for name, (path, params) in paths.items():
         try:
             data[name] = api_get(base_url, path, **params)
-        except requests.RequestException as exc:
+        except httpx.HTTPError as exc:
             errors[name] = str(exc)
     return data, errors
 
@@ -116,11 +116,11 @@ if health_scores:
         )
         health_chart.update_yaxes(range=[0, 100])
         health_chart.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=20, b=10))
-        st.plotly_chart(health_chart, use_container_width=True)
+        st.plotly_chart(health_chart, width="stretch")
         latest = health_frame.sort_values(["service", "window_end", "id"]).groupby("service", as_index=False).tail(1)
         st.dataframe(
             latest[["service", "score", "anomaly_count", "window_minutes", "window_end"]],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
     else:
@@ -137,7 +137,7 @@ if anomalies:
             "observed_value", "expected_baseline", "score", "score_label", "severity",
         ) if column in anomaly_frame.columns
     ]
-    st.dataframe(anomaly_frame[anomaly_columns], use_container_width=True, hide_index=True)
+    st.dataframe(anomaly_frame[anomaly_columns], width="stretch", hide_index=True)
     anomaly_ids = [item["id"] for item in anomalies]
     selected_anomaly_id = st.selectbox("Inspect structured anomaly evidence", anomaly_ids)
     selected_anomaly = next(item for item in anomalies if item["id"] == selected_anomaly_id)
@@ -154,7 +154,7 @@ if incidents:
             "anomaly_count", "anomaly_ids", "explanation",
         ) if column in incident_frame.columns
     ]
-    st.dataframe(incident_frame[display_columns], use_container_width=True, hide_index=True)
+    st.dataframe(incident_frame[display_columns], width="stretch", hide_index=True)
     for incident in incidents:
         title = f"#{incident['id']} · {incident['severity'].upper()} · {incident['service_group']} · {incident['status']}"
         with st.expander(title):
@@ -170,7 +170,7 @@ if alerts:
         column for column in ("id", "incident_id", "channel", "timestamp", "delivery_status")
         if column in alert_frame.columns
     ]
-    st.dataframe(alert_frame[alert_columns], use_container_width=True, hide_index=True)
+    st.dataframe(alert_frame[alert_columns], width="stretch", hide_index=True)
     alert_ids = [item["id"] for item in alerts]
     selected_alert_id = st.selectbox("Inspect simulated alert payload", alert_ids)
     selected_alert = next(item for item in alerts if item["id"] == selected_alert_id)
