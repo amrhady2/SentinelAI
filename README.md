@@ -19,7 +19,8 @@ Local-first, API-first Python service. Steps 1–5 are implemented: project skel
 
 ## Implemented in step 3: incidents and health scores
 
-- Anomalies for the same service join one open incident when the gap is at most `SENTINEL_CORRELATION_WINDOW_MINUTES` (default **5 minutes**). The boundary is inclusive. A gap beyond the window closes the prior incident and opens another. Incidents close after a quiet period greater than or equal to the same window; the incident list endpoint also applies this close check.
+- Anomalies for the same service join one open incident when the gap is at most `SENTINEL_CORRELATION_WINDOW_MINUTES` (default **5 minutes**). The boundary is inclusive. A gap beyond the window closes the prior incident and opens another. Quiet-period closure uses the global latest stored event timestamp (the same reference as the health-window anchor), never wall-clock time; the incident, alert, webhook, and alert-evaluation paths apply this event-time close check.
+- Known limitation: because closure uses a global event-time reference, a busy service can advance the clock and close an incident for a different service that has gone silent. This is the tradeoff for sharing the health window’s global latest-event anchor.
 - Each incident stores its anomaly IDs, first/last seen timestamps, severity, status, title, and a deterministic explanation. The title and explanation templates are configured in `app/analytics_config.py`; the explanation uses only stored anomaly evidence (method, metric, observed value, baseline, score, severity, and timestamp). No LLM is called.
 - Health is calculated for each known service over the last `SENTINEL_HEALTH_WINDOW_MINUTES` (default **60 minutes**) anchored to the latest ingested event timestamp (not wall-clock time), including anomalies exactly at the window cutoff. Each snapshot stores both its event-time window end and the wall-clock time at which it was calculated:
 
@@ -34,7 +35,7 @@ Local-first, API-first Python service. Steps 1–5 are implemented: project skel
 - `POST /api/v1/alerts/evaluate` checks open incidents and records one simulated alert per incident and channel. Repeated evaluations are suppressed until the configured cooldown expires; a repeat is allowed at the cooldown boundary.
 - Cooldown is configured with `SENTINEL_ALERT_COOLDOWN_MINUTES` (default **15 minutes**) in `app/alerts_config.py`.
 - `POST /api/v1/webhooks/local` records a local delivery attempt for an incident. It only persists the provided payload and logs the simulated attempt; it makes no outbound HTTP or internet request.
-- Alerts persist their incident ID, channel (`local_webhook`), timestamp, delivery status (`simulated`), and payload. `GET /api/v1/alerts` lists them, with optional incident/channel filters.
+- Alerts persist their incident ID, channel (`local_webhook`), timestamp, delivery status (`simulated`), and payload. Alert responses expose `status_at_alert_time` and `current_incident_status`; they do not expose an ambiguous bare `status` field. `GET /api/v1/alerts` lists them, with optional incident/channel filters.
 - The alert rule currently applies to every open incident. Severity-based routing and external delivery are not implemented.
 - Cooldown boundary rule: the boundary is inclusive; a repeat alert is allowed when elapsed time is exactly the configured cooldown.
 - The suite emits a Starlette `TestClient`/`httpx` deprecation warning. It is known and harmless; tests pass.
@@ -64,13 +65,15 @@ In a second terminal, start the read-only dashboard:
 streamlit run dashboard.py --server.address 127.0.0.1 --server.port 8501
 ```
 
-Open `http://127.0.0.1:8501`. The dashboard reads its data from FastAPI; start the API first.
+Open `http://127.0.0.1:8501`. The dashboard reads its data from FastAPI; start the API first. To point it at a different local API, set `SENTINEL_API_URL`, for example `SENTINEL_API_URL=http://127.0.0.1:8001`.
 
 Generate and post a reproducible synthetic workload in another terminal:
 
 ```bash
-python tools/generate_sample_logs.py --scenario error_spike --seed 42 --post-url http://127.0.0.1:8000/api/v1/logs/ingest
+python tools/generate_sample_logs.py --scenario error_spike --seed 42 --output /tmp/seed.json --post-url http://127.0.0.1:8000/api/v1/logs/ingest
 ```
+
+Always pass `--output` to keep generated files out of the tracked `data/sample_logs.json`.
 
 Then run detection using `POST /api/v1/detection/run` and review results from `GET /api/v1/anomalies`. Without `--post-url`, the generator only writes a JSON file and makes no network request.
 
@@ -81,6 +84,15 @@ pytest -q
 ```
 
 The suite is in `tests/` and covers minute bucket aggregation and gap filling, rolling baseline exclusion, z-score warm-up and zero-variance behavior, missing values, Isolation Forest warm-up, detection and reproducibility, incident correlation boundaries and quiet-period close, health scoring/clamping/window boundaries and event-time anchoring, alert deduplication/cooldown, and local webhook recording.
+
+
+### Verified seeded evidence (2026-11-26)
+
+Read-only verification against the local API on port 8001, backed by the disposable `data/closure_check.db`, found 350 `checkout` events: 300 labeled `normal_operation` from 14:00 to before 15:00 UTC and 50 `error_spike` events from 15:00 to before 15:10 UTC. The stored 18 anomalies break down as 15 Isolation Forest and 3 rolling z-score findings. Within the normal-operation interval, 11 findings occurred: anomaly IDs 4–14, all from Isolation Forest; rolling z-score produced none in that interval. These are false positives against the known normal scenario in this seeded run; this is a known Isolation Forest limitation, and contamination remains `auto`. All three rolling z-score findings and Isolation Forest IDs 15–18 fall in the error-spike interval.
+
+The two incidents also match event-time closure: incident 1, last seen at 14:51 UTC, is closed because the latest event at 15:09:40 UTC is 18 minutes 40 seconds later (beyond the five-minute window). Incident 2, last seen at 15:09 UTC, remains open because its last event is also the latest event. The API reports one open incident. The alerts expose `current_incident_status` and `status_at_alert_time`, with no bare `status` key.
+
+The health endpoint reports checkout score **10**, **18** in-window anomalies, a 60-minute window, and `window_end` **2026-11-26T15:09:40Z**. The dashboard was pointed at `http://127.0.0.1:8001` via `SENTINEL_API_URL`; its open-incident count was **1** and its health history score was **10**, matching the API response.
 
 ## API available so far
 

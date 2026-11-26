@@ -33,6 +33,7 @@ This document records approved scope and parameters from the user prompts in `pr
 ## Step 3–4 event-time and alert-status decisions
 
 - Incident closure uses the global latest stored event timestamp as its explicit reference time. It is the same event-time reference used to anchor the service health window. Read and alert-evaluation endpoints do not close incidents based on wall-clock time. The quiet period closes an incident when `global_latest_event_time - incident.last_seen >= correlation_window_minutes`.
+- Known limitation: because this reference is global, events from an active service can advance the clock used to close incidents for another service that has gone silent. This cross-service behavior is accepted to keep closure aligned with the global health-window anchor.
 - Alert responses expose `status_at_alert_time` as the persisted incident-status snapshot and `current_incident_status` from the currently stored incident. They do not expose an ambiguous bare `status` field. Legacy stored payloads with `status` are normalized at read time.
 
 ## Existing implementation alignment

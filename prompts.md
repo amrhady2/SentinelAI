@@ -136,3 +136,26 @@ Step 5 is verified and accepted. Proceed with step 6 only: tests. Read docs/SPEC
 ```text
 Read docs/SPEC.md and prompts.md. Investigate whether incident closure uses wall-clock time (datetime.now, utcnow) instead of the latest event timestamp. Evidence: both incidents have last_seen 16:01:00Z and the latest event is 16:01:59Z, yet both show closed with no new events arriving. Under the event-time rule the 5-minute quiet period has not elapsed. If closure uses the wall clock, change it to use the latest stored event time, consistent with the health window anchor. Name the closure reference explicitly: use the global latest event time (the same reference as the health window) unless the spec says otherwise, and record the choice in docs/SPEC.md. Add a test that fails before the fix: an incident whose last anomaly is within the quiet period of the latest event must stay open, even when the wall clock is hours later. Show that the test fails before the fix and passes after it. Also explain why the existing test_incident_closes_after_full_quiet_period passed while this bug was live, and strengthen that test so it fails under wall-clock closure. For alerts, choose one status meaning: either compute the status from the current incident at read time, or store status_at_alert_time and expose both fields. The alert list must never show a bare "status":"open" that can go stale. Do not change detection thresholds or health weights. Run pytest -v and show the output, commit the changes with a clear message, push, and report the elapsed time. Wait for my next instruction before moving to step 7.
 ```
+
+
+## Prompt 13 — closure evidence and dashboard verification
+
+```text
+Do not delete or overwrite data/sentinelai.db.
+
+Follow-up on the closure fix (commit 4435374). The live API on port 8000 returns empty incidents and alerts, and we confirmed why the file looks empty: SENTINEL_DATABASE_URL is not set (echo prints []), and every table in data/sentinelai.db is empty (logevent 0, anomaly 0, incident 0, simulatedalert 0, servicehealthsnapshot 0). The data the API served at step 5 came from a database that no longer exists or was wiped. Before running the tests again, report which database path the test suite uses: a temporary database, or the default data/sentinelai.db. If the tests write to the default file, that explains the empty database.
+
+1. Prove red-before-green for the closure fix without touching main. Create a temporary worktree at a path outside the repo (for example /tmp/sentinel_prefix) on commit 613ccae. Copy the new closure tests into it, run them there, and paste the failures. Then remove the worktree. Do not modify main's application code.
+
+2. Record the known limitation in docs/SPEC.md: closure uses the global latest event time, so if one service keeps sending events while another goes silent, the silent service's incidents close on the other service's clock. Keep the global reference (it matches the health window anchor) and state this limitation plainly; do not change the reference.
+
+3. Record the seeded end-to-end evidence from port 8001 (disposable database closure_check.db, checkout service): 300 normal_operation events 14:00-15:00 plus 50 error_spike events 15:00-15:10. Detection created 18 anomalies and 2 incidents. Incident 2 (last anomaly 15:09) is open because its last event is the latest stored event. Incident 1 (last anomaly 14:51) is closed because 18 minutes elapsed, past the 5-minute quiet period. Alert payloads expose current_incident_status and status_at_alert_time with no bare status field. Verify these results still hold on the current code and cite them in the README.
+
+4. The detection run reported by_method {rolling_zscore: 3, isolation_forest: 15}. Verify from the data which detector produced each of the 18 anomalies, and which of them fall in the normal_operation window (14:00 to 15:00). Report the count per detector. Do not claim the z-score detector had no false positives unless the data shows it. Once verified, state the finding in the README as a known limitation; do not change the contamination setting.
+
+5. Re-verify the step 5 dashboard against identifiable data. Since the dashboard reads from one API URL, point it at the 8001 instance rather than reseeding 8000, if the setting exists; if not, reseed the 8000 database instead. Expected result: 1 open incident (incident 2), and health numbers matching curl -s http://127.0.0.1:8001/api/v1/health/scores. Confirm the dashboard number against that curl output, not against memory.
+
+6. The sample-logs generator overwrites the tracked file data/sample_logs.json when run without --output. Restore that file if it was modified, and from now on seed with --output to a temporary file (for example /tmp/seed.json). Check git status before each commit.
+
+Run pytest -v and show the output. Commit any changes with a clear message but do not push; I will push from my terminal. Report the elapsed time. Wait for my next instruction before moving to step 7.
+```
