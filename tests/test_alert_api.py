@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import socket
 
 from fastapi.testclient import TestClient
 import pytest
@@ -34,7 +35,7 @@ def api_client(monkeypatch):
         main_module.app.dependency_overrides.clear()
 
 
-def test_local_webhook_endpoint_records_simulated_attempt(api_client) -> None:
+def test_local_webhook_endpoint_records_simulated_attempt(api_client, monkeypatch) -> None:
     client, engine = api_client
     timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
     with Session(engine) as session:
@@ -55,6 +56,13 @@ def test_local_webhook_endpoint_records_simulated_attempt(api_client) -> None:
         session.refresh(incident)
         incident_id = incident.id
 
+    outbound_attempts = []
+
+    def reject_outbound_connect(*args, **kwargs):
+        outbound_attempts.append((args, kwargs))
+        raise AssertionError("simulated webhook attempted an outbound connection")
+
+    monkeypatch.setattr(socket.socket, "connect", reject_outbound_connect)
     response = client.post(
         "/api/v1/webhooks/local",
         json={"incident_id": incident_id, "payload": {"source": "test", "value": 7}},
@@ -65,6 +73,7 @@ def test_local_webhook_endpoint_records_simulated_attempt(api_client) -> None:
     assert body["channel"] == "local_webhook"
     assert body["delivery_status"] == "simulated"
     assert body["payload"] == {"source": "test", "value": 7}
+    assert outbound_attempts == []
 
     listed = client.get("/api/v1/alerts", params={"incident_id": incident_id})
     assert listed.status_code == 200

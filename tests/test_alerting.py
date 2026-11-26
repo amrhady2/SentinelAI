@@ -75,3 +75,18 @@ def test_repeat_alert_allowed_at_configured_cooldown_boundary() -> None:
         assert len(after) == 1 and after_suppressed == 0
         assert after[0].timestamp == start + timedelta(minutes=15)
         assert len(session.exec(select(SimulatedAlert)).all()) == 2
+
+
+
+def test_alert_cooldown_is_configurable() -> None:
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with make_session() as session:
+        make_open_incident(session)
+        first, _ = evaluate_open_incident_alerts(session, now=start, cooldown_minutes=3)
+        session.commit()
+        repeat, suppressed = evaluate_open_incident_alerts(
+            session, now=start + timedelta(minutes=3), cooldown_minutes=3
+        )
+        assert len(first) == 1
+        assert len(repeat) == 1
+        assert suppressed == 0

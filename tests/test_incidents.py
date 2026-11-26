@@ -96,6 +96,14 @@ def test_incident_closes_after_full_quiet_period() -> None:
         session.commit()
         correlate_anomalies(session, now=start, window_minutes=5)
         session.commit()
+        assert close_quiet_incidents(
+            session,
+            now=start + timedelta(minutes=5, microseconds=-1),
+            window_minutes=5,
+        ) == 0
+        session.commit()
+        still_open = session.exec(select(Incident)).one()
+        assert still_open.status == "open"
         assert close_quiet_incidents(session, now=start + timedelta(minutes=5), window_minutes=5) == 1
         session.commit()
         incident = session.exec(select(Incident)).one()

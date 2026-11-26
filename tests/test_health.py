@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.health import calculate_service_health_scores
 
 
@@ -30,3 +32,12 @@ def test_health_window_includes_cutoff_and_excludes_older_anomaly() -> None:
     assert calculate_service_health_scores(["payments"], anomalies, now=now, window_minutes=60) == {
         "payments": (98, 1)
     }
+
+
+@pytest.mark.parametrize(("severity", "weight"), [("low", 2), ("medium", 5), ("high", 10), ("critical", 20)])
+def test_health_score_subtracts_configured_severity_weight(severity: str, weight: int) -> None:
+    now = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    result = calculate_service_health_scores(
+        ["payments"], [anomaly("payments", severity, now)], now=now
+    )
+    assert result == {"payments": (100 - weight, 1)}
