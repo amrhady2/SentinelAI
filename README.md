@@ -1,6 +1,6 @@
 # SentinelAI — Intelligent Observability & Event Watchdog
 
-Local-first, API-first Python service. Steps 1–4 are implemented: project skeleton and ingestion, deterministic anomaly detection, incident correlation, service health scores, and simulated local alerting. Dashboard and packaging implementation remain for later approved steps.
+Local-first, API-first Python service. Steps 1–5 are implemented: project skeleton and ingestion, deterministic anomaly detection, incident correlation, service health scores, simulated local alerting, and a read-only dashboard. Container packaging remains for a later approved step.
 
 ## Implemented in step 1
 
@@ -12,7 +12,7 @@ Local-first, API-first Python service. Steps 1–4 are implemented: project skel
 ## Implemented in step 2: detection engine
 
 - Pandas aggregates UTC log events into one-minute buckets per service. Missing time buckets receive zero event frequency and error rate; latency remains missing when unavailable.
-- Rolling z-score compares each metric with the prior 30 buckets, using population standard deviation. It starts only after 30 prior buckets; the current bucket is excluded. The threshold is strictly `|z| > 3`. By design, any deviation from a zero-variance baseline is flagged as an anomaly (z treated as infinite). Since JSON cannot encode Infinity, infinite z-scores are stored as `null` with a `score_label` such as `positive_infinity`.
+- Rolling z-score compares each metric with the prior 30 buckets, using population standard deviation. It starts only after 30 prior buckets; the current bucket is excluded. The threshold is strictly `|z| > 3`. By design, any deviation from a zero-variance baseline is flagged as an anomaly (z treated as infinite). Since JSON cannot encode Infinity, infinite z-scores are stored as `null` with a `score_label` such as `positive_infinity`. Tradeoff: a service with a flat metric will alert on its first real movement.
 - Isolation Forest trains independently per service using only its prior 30 buckets. It uses `random_state=42`, and contamination is configurable with `SENTINEL_IFOREST_CONTAMINATION` (default `auto`). Missing feature values are imputed from the training-window median; a wholly missing feature is excluded. The current bucket is never included in its own training set.
 - Both detector functions are independently testable and run without an LLM. Anomaly evidence includes method, metric, observed value, expected baseline/threshold, score, severity, affected service, timestamp, and supporting details. Current detector severity is uniformly `medium`; severity classification is not yet defined.
 - `POST /api/v1/detection/run` executes both detectors over ingested logs and idempotently persists results. `GET /api/v1/anomalies` returns stored structured evidence.
@@ -36,6 +36,14 @@ Local-first, API-first Python service. Steps 1–4 are implemented: project skel
 - `POST /api/v1/webhooks/local` records a local delivery attempt for an incident. It only persists the provided payload and logs the simulated attempt; it makes no outbound HTTP or internet request.
 - Alerts persist their incident ID, channel (`local_webhook`), timestamp, delivery status (`simulated`), and payload. `GET /api/v1/alerts` lists them, with optional incident/channel filters.
 - The alert rule currently applies to every open incident. Severity-based routing and external delivery are not implemented.
+- Cooldown boundary rule: the boundary is inclusive; a repeat alert is allowed when elapsed time is exactly the configured cooldown.
+- The suite emits a Starlette `TestClient`/`httpx` deprecation warning. It is known and harmless; tests pass.
+
+## Implemented in step 5: read-only dashboard
+
+- `dashboard.py` uses Streamlit and Plotly and reads the local FastAPI API only. It does not import database modules, read SQLite, or expose write actions.
+- It shows stored per-service health history, structured anomaly evidence, incident explanations, and simulated alert delivery statuses.
+- `SENTINEL_API_URL` can select the API origin, but it is restricted to `localhost`, `127.0.0.1`, or `::1`. Streamlit binds to loopback.
 
 ## Run locally
 
@@ -45,10 +53,18 @@ Python 3.11 or newer is recommended. Install dependencies, then start the API:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8000/docs`. The SQLite database is created at `data/sentinelai.db`; set `SENTINEL_DATABASE_URL` to override it.
+
+In a second terminal, start the read-only dashboard:
+
+```bash
+streamlit run dashboard.py --server.address 127.0.0.1 --server.port 8501
+```
+
+Open `http://127.0.0.1:8501`. The dashboard reads its data from FastAPI; start the API first.
 
 Generate and post a reproducible synthetic workload in another terminal:
 
@@ -86,11 +102,11 @@ Generated events are synthetic. Timestamps are normalized to UTC; SQLite may not
 
 ## Scaffold review
 
-The initial scaffold was inspected before refactoring. Its log validation and persistence concepts were retained and separated into schemas, models, database, and ingestion modules. The earlier single-file threshold detector was removed because it did not match the approved detection design. The initial dashboard draft is preserved in `drafts/dashboard_draft.py` for the later dashboard stage and is not wired into the API yet.
+The initial scaffold was inspected before refactoring. Its log validation and persistence concepts were retained and separated into schemas, models, database, and ingestion modules. The earlier single-file threshold detector was removed because it did not match the approved detection design. The preserved `drafts/dashboard_draft.py` informed the active `dashboard.py`; its ingestion controls, demo-seeding action, and incident mutation controls were omitted to keep the dashboard read-only. Dashboard data comes exclusively from FastAPI endpoints.
 
 The exact prompt history is maintained in [`prompts.md`](prompts.md).
 
 ## Remaining build scope
 
-- Not implemented yet: the Streamlit + Plotly dashboard and container packaging.
+- Not implemented yet: container packaging.
 - Docker Compose is out of scope for this build; packaging will use a single Dockerfile only. The Dockerfile itself has not yet been added.

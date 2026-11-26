@@ -109,3 +109,9 @@ Step 3 is verified, with five small items before step 4: (1) confirm the 60-minu
 ```text
 Continue from where you stopped. Verify plain pytest -q from the project root and show its output, show the stored incident example with its template explanation, then proceed with step 4 only (alerting) exactly as instructed in my previous message. Record this prompt in prompts.md. Report what was built, the test results, and the elapsed time, and wait for my next instruction before moving to step 5.
 ```
+
+## Prompt 9 — step 5 dashboard
+
+```text
+Step 4 is verified. Proceed with step 5 only: the dashboard. Do not change any existing alerting, detection, or incident logic. Build the Streamlit + Plotly dashboard, starting from the preserved drafts/dashboard_draft.py. The dashboard must consume the FastAPI endpoints only; it must never read SQLite directly. Show: per-service health score trends over time from the stored health history, the anomaly list with evidence fields, the incident list with explanations, and the alert list with delivery status. The dashboard is read-only: do not add write actions. Keep it local-only. Add the dashboard run command to the README. Also record in the README: the alert cooldown boundary rule (repeats allowed at the boundary, inclusive), the Starlette TestClient/httpx deprecation warning as known and harmless, and the zero-variance tradeoff (a service with a flat metric will alert on its first real movement, by design). Run pytest -q and show the output. Start the dashboard and verify it loads and displays data from the API, then report what was built, how you verified it, and the elapsed time, and wait for my next instruction before moving to step 6. After finishing, commit the changes with a clear message describing step 5.
+```
