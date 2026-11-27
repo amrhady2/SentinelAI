@@ -199,3 +199,9 @@ Commit with a clear message but do not push; I will push from my terminal. Repor
 ```text
 README.md says Streamlit binds to loopback, but the Docker command binds Streamlit to 0.0.0.0 inside the container while the host port stays restricted to loopback. Reword the loopback claim to distinguish the local run (Streamlit binds to 127.0.0.1) from the container run (Streamlit binds to 0.0.0.0 inside the container; the published host port is 127.0.0.1 only). Apply the same clarification to the matching line in docs/SentinelAI_Deck.md. Change nothing else. Then append this prompt as prompt 17 to prompts.md.
 ```
+
+## Prompt 18 — correct seeded incident evidence
+
+```text
+Prompt 18: Fix one factual error in the README. In the seeded evidence section, the README says incident 2 "remains open because its last event is also the latest event." This is wrong. The seeded data shows incident 2's last anomaly is at 15:09:00, and the latest event is at 15:09:40, 40 seconds later. Correct the sentence to state that incident 2 remains open because its last anomaly (15:09:00) is only 40 seconds before the latest event (15:09:40), well within the 5-minute correlation window. Do not change any other content in the README. Do not fix the SPEC title, the deck, or requirements.txt. After the fix, append this prompt verbatim as Prompt 18 to prompts.md, then commit both files.
+```
